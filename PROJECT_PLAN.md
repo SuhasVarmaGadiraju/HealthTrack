@@ -125,21 +125,36 @@ HealthTrack/
 - Excludes records older than the window start (`00:00:00Z` 29 days ago) and any future timestamps (`> now_utc`).
 - Groups matching logs by UTC calendar date, computes arithmetic mean `round(sum / count, 2)`, and fills missing dates with `average_severity = None`, `symptom_count = 0`.
 
-## 7. Completed Backend Requirements & Testing Results
-- **Phase 2 Pytest Suite**: `35 passed, 0 failed` (`tests/test_health.py`, `tests/test_symptoms.py`, `tests/test_trends.py`) using isolated temporary SQLite databases via `tmp_path`.
+## 7. Completed Requirements & Testing Results
+- **Phase 2 Backend Pytest Suite**: `35 passed, 0 failed` (`tests/test_health.py`, `tests/test_symptoms.py`, `tests/test_trends.py`) using isolated temporary SQLite databases via `tmp_path`.
+- **Phase 3 Frontend Vitest Suite**: `7 passed, 0 failed` (`src/App.test.jsx`) covering dashboard rendering, PAT001 loading, summary statistics, empty states, whitespace-only rejection, valid submission & history update, network failure input preservation & duplicate submit prevention, patient switching & stale-response protection, and `SeverityChart` rendering.
+- **Phase 3 Frontend Lint & Build**: `oxlint` passed with `0 errors` (`1 warning` from React Compiler `set-state-in-effect` rule in `usePatientSymptoms.js`); `vite build` succeeded cleanly.
+- **Browser Verification**: Blocked/unavailable in this environment (`chrome_devtools` MCP could not find `DevToolsActivePort` for Chrome).
 - **Known Limitations**:
   - No authentication/authorization (`patient_id` is a demo scope filter).
   - SQLite single-writer concurrency is suitable for a local prototype, not high-concurrency production workloads.
-  - Same-millisecond rapid-fire requests on Windows may share a system clock tick; deterministic ordering falls back to `id` ascending.
+  - On Windows, rapid back-to-back requests within the same ~15.6ms system clock tick can share a timestamp; deterministic `(timestamp, id)` ordering keeps retrieval order stable.
+  - Live browser E2E verification pending Chrome remote debugging availability.
 
-## 8. Backend Commands
-Run from `d:\HealthTrack\backend`:
+## 8. Commands to Run Backend & Frontend
+Backend (from `d:\HealthTrack\backend`):
 - **Start server**: `.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000`
 - **Run tests**: `.\.venv\Scripts\pytest.exe -v`
 - **Seed synthetic demo data**: `.\.venv\Scripts\python.exe -m scripts.seed_demo`
 
-## 9. Implementation Phases & AI Disclosure Log
+Frontend (from `d:\HealthTrack\frontend`):
+- **Start dev server**: `npm run dev`
+- **Run tests**: `npm run test`
+- **Run lint**: `npm run lint`
+- **Build production bundle**: `npm run build`
+
+## 9. Frontend Architecture & Decisions (Phase 3)
+- **Component Structure**: `Header`, `PatientSelector`, `SummaryCards`, `SymptomForm`, `SeverityChart`, `SymptomTable`, `FeedbackMessage`, `EmptyState`, and `Footer`, coordinated by `usePatientSymptoms` hook and `src/api/symptoms.js`.
+- **API Integration**: Native `fetch` with `URLSearchParams`, `AbortController` + monotonic request sequence counter to prevent stale patient responses from overwriting active patient state, FastAPI `422` `detail` parsing, safe `500` handling, and no automatic retries on `POST`.
+- **Accessibility & Error Handling**: Semantic landmarks, explicit `<label>`/`aria-describedby`/`aria-invalid` associations, `role="radiogroup"` for 1–10 severity selection, `aria-live="polite"` feedback alerts with icons + text, and `Retry` actions on failed `GET` requests.
+
+## 10. Implementation Phases & AI Disclosure Log
 1. **Phase 1 — Project Initialization (Done)**: Workspace setup, Vite + React + Tailwind CSS, FastAPI + venv, `PROJECT_PLAN.md`, `.gitignore`, `/api/health`, initial Git commit (`1d2e911`).
 2. **Phase 2 — Backend Database, Models, API & Analytics (Done)**: AI-assisted implementation of SQLAlchemy 2.x models/DB session management, Pydantic v2 strict validation, REST endpoints, 30-day UTC trend analytics, synthetic seed script, and 35 Pytest tests.
-3. **Phase 3 — Frontend Core UI & History Table (Next)**: API client with error handling, symptom submission form, patient ID selector, chronological symptom history table (latest at bottom).
-4. **Phase 4 — 30-Day Severity Trend Chart & Polish**: Recharts daily average severity line chart, Vitest component tests, UI/UX polish, and `README.md`.
+3. **Phase 3 — Frontend Core UI, History Table & Trends Integration (Done)**: AI-assisted implementation of healthcare UI design system, `usePatientSymptoms` hook, centralized `fetch` API client, `SymptomForm`, `SymptomTable`, `SeverityChart` (Recharts), `SummaryCards`, and 7 Vitest integration tests.
+4. **Phase 4 — Deep Analytics Review, Polish & Final Documentation (Next)**: Analytics/chart review, browser E2E verification, `README.md` with AI usage disclosure, and final polish.
