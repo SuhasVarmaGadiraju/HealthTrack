@@ -11,12 +11,24 @@ from app.schemas import DailySeverityTrend, SymptomCreate
 
 
 def create_symptom_log(db: Session, payload: SymptomCreate) -> SymptomLog:
-    """Persist a new symptom log with a server-generated UTC timestamp."""
+    """Persist a new symptom log with a monotonically unique server-generated UTC timestamp."""
+    candidate_ts = utc_now()
+    latest_ts = db.scalar(
+        select(SymptomLog.timestamp)
+        .where(SymptomLog.patient_id == payload.patient_id)
+        .order_by(SymptomLog.timestamp.desc())
+        .limit(1)
+    )
+    if latest_ts is not None:
+        latest_utc = latest_ts.astimezone(timezone.utc)
+        if candidate_ts <= latest_utc:
+            candidate_ts = latest_utc + timedelta(microseconds=1)
+
     log = SymptomLog(
         patient_id=payload.patient_id,
         description=payload.description,
         severity=payload.severity,
-        timestamp=utc_now(),
+        timestamp=candidate_ts,
     )
     db.add(log)
     db.commit()
