@@ -1,6 +1,5 @@
 """Comprehensive tests for symptom creation, validation, retrieval, and reliability."""
 
-import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -52,8 +51,6 @@ def test_five_logs_unique_timestamps_and_persistence(
 ) -> None:
     """Five logs for one patient have unique timestamps and persist across sessions."""
     for idx in range(5):
-        if idx > 0:
-            time.sleep(0.02)
         resp = client.post(
             "/api/symptoms",
             json={
@@ -188,6 +185,7 @@ def test_database_check_constraints_reject_invalid_direct_inserts(
 def test_database_error_returns_safe_500() -> None:
     """Unexpected SQLAlchemy errors return HTTP 500 without leaking internal details."""
     broken_db = MagicMock(spec=Session)
+    broken_db.scalar.return_value = None
     broken_db.commit.side_effect = SQLAlchemyError("sqlite3.OperationalError: secret internal path")
 
     app.dependency_overrides[get_db] = lambda: broken_db
@@ -204,3 +202,49 @@ def test_database_error_returns_safe_500() -> None:
         broken_db.rollback.assert_called_once()
     finally:
         app.dependency_overrides.clear()
+
+
+def test_special_characters_in_patient_id_and_description(client: TestClient) -> None:
+    """Special characters and HTML-like strings are stored and returned verbatim."""
+    payload = {
+        "patient_id": "PAT-001_alpha",
+        "description": "<script>alert('xss')</script> & 100% fatigue",
+        "severity": 6,
+    }
+    post_resp = client.post("/api/symptoms", json=payload)
+    assert post_resp.status_code == 201
+    assert post_resp.json()["data"]["patient_id"] == "PAT-001_alpha"
+    assert post_resp.json()["data"]["description"] == "<script>alert('xss')</script> & 100% fatigue"
+
+    get_resp = client.get("/api/symptoms", params={"patient_id": "PAT-001_alpha"})
+    assert get_resp.status_code == 200
+    assert get_resp.json()[0]["description"] == "<script>alert('xss')</script> & 100% fatigue"
+
+
+def test_seed_demo_records_no_future_timestamps_and_idempotent(
+    db_session_factory: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Demo seed script produces no future timestamps and is idempotent across repeated runs."""
+    from scripts import seed_demo
+
+    now_utc = datetime.now(timezone.utc)
+    records = seed_demo.build_demo_records(now_utc)
+    assert len(records) >= 12
+    assert all(ts <= now_utc for _, _, _, ts in records)
+
+    pat1_dates = {ts.date() for pid, _, _, ts in records if pid == "PAT001"}
+    assert len(pat1_dates) >= 5
+
+    monkeypatch.setattr(seed_demo, "SessionLocal", db_session_factory)
+    monkeypatch.setattr(seed_demo, "init_db", lambda: None)
+
+    seed_demo.seed_demo_data()
+    with db_session_factory() as db:
+        first_count = db.query(SymptomLog).count()
+    assert first_count == len(records)
+
+    # Second run must not create duplicates
+    seed_demo.seed_demo_data()
+    with db_session_factory() as db:
+        second_count = db.query(SymptomLog).count()
+    assert second_count == first_count

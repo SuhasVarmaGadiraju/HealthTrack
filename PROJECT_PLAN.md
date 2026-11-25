@@ -126,15 +126,25 @@ HealthTrack/
 - Groups matching logs by UTC calendar date, computes arithmetic mean `round(sum / count, 2)`, and fills missing dates with `average_severity = None`, `symptom_count = 0`.
 
 ## 7. Completed Requirements & Testing Results
-- **Phase 2 Backend Pytest Suite**: `35 passed, 0 failed` (`tests/test_health.py`, `tests/test_symptoms.py`, `tests/test_trends.py`) using isolated temporary SQLite databases via `tmp_path`.
-- **Phase 3 Frontend Vitest Suite**: `7 passed, 0 failed` (`src/App.test.jsx`) covering dashboard rendering, PAT001 loading, summary statistics, empty states, whitespace-only rejection, valid submission & history update, network failure input preservation & duplicate submit prevention, patient switching & stale-response protection, and `SeverityChart` rendering.
-- **Phase 3 Frontend Lint & Build**: `oxlint` passed with `0 errors` (`1 warning` from React Compiler `set-state-in-effect` rule in `usePatientSymptoms.js`); `vite build` succeeded cleanly.
-- **Browser Verification**: Blocked/unavailable in this environment (`chrome_devtools` MCP could not find `DevToolsActivePort` for Chrome).
-- **Known Limitations**:
-  - No authentication/authorization (`patient_id` is a demo scope filter).
-  - SQLite single-writer concurrency is suitable for a local prototype, not high-concurrency production workloads.
-  - On Windows, rapid back-to-back requests within the same ~15.6ms system clock tick can share a timestamp; deterministic `(timestamp, id)` ordering keeps retrieval order stable.
-  - Live browser E2E verification pending Chrome remote debugging availability.
+- **Phase 4 Requirement Coverage Matrix**:
+  - Persistent storage (`patient_id`, `description`, `severity`, `timestamp`): `backend/app/models.py`, `backend/app/database.py` — Verified via Pytest + live SQLite persistence.
+  - `>= 5` symptom logs with unique timestamps: `backend/app/services/symptoms.py`, `backend/scripts/seed_demo.py` — Verified via rapid 5-POST Pytest & live HTTP check (`5` unique UTC timestamps).
+  - Valid `POST /api/symptoms` & rejection of empty/whitespace descriptions and invalid severities: `backend/app/schemas.py`, `backend/app/routers/symptoms.py` — Verified via 18 parameterized 422 Pytest cases + live HTTP `422`.
+  - Patient-specific `GET /api/symptoms` sorted chronologically ascending: `backend/app/services/symptoms.py` — Verified via Pytest (`(timestamp ASC, id ASC)`) & live HTTP.
+  - Frontend form, chronological table (latest at bottom), error handling & 30-day Recharts line chart: `frontend/src/components/` — Verified via 10 Vitest tests, `oxlint`, and `vite build`.
+- **Phase 4 Bugs Identified & Fixed**:
+  1. **Rapid consecutive timestamp collisions on Windows**: `create_symptom_log` now checks the latest persisted timestamp for `patient_id` and advances by `+1 microsecond` if `candidate_ts <= latest_utc`, eliminating Windows ~15.6ms clock tick collisions without `time.sleep`.
+  2. **Seed script future timestamps**: `build_demo_records` in `backend/scripts/seed_demo.py` now places all 12 `PAT001` records on `days_ago >= 1` (including a 5-day consecutive streak `days_ago` 5..1 and multi-log days) so no future timestamps are ever generated regardless of UTC time of day.
+  3. **Frontend `oxlint` `react(set-state-in-effect)` warning**: Refactored `usePatientSymptoms.js` `useEffect` to resolve `Promise.allSettled` directly inside the effect (`0 warnings, 0 errors`).
+  4. **Vite bundle chunk-size notice**: Added `manualChunks` in `frontend/vite.config.js` to split `recharts`/`d3-*` into `charts` chunk (`0` build warnings).
+- **Backend Pytest Suite**: `37 passed, 0 failed` (`tests/test_health.py`, `tests/test_symptoms.py`, `tests/test_trends.py`) using isolated temporary SQLite databases.
+- **Frontend Vitest Suite**: `10 passed, 0 failed` (`src/App.test.jsx`).
+- **Frontend Lint & Build**: `oxlint` passed with `0 warnings, 0 errors`; `vite build` succeeded cleanly in 873ms.
+- **Browser Verification**: Automated Chrome verification blocked in this environment (`chrome_devtools` MCP `DevToolsActivePort` unavailable); manual verification checklist provided to the user.
+- **Security & Prototype Limitations**:
+  - `patient_id` filtering is for demo scoping only, not authentication or authorization.
+  - Synthetic patient data only; no secrets or `.db`/`.env` files tracked in Git.
+  - SQLite single-writer concurrency is intended for local prototype demonstration.
 
 ## 8. Commands to Run Backend & Frontend
 Backend (from `d:\HealthTrack\backend`):
@@ -157,4 +167,5 @@ Frontend (from `d:\HealthTrack\frontend`):
 1. **Phase 1 — Project Initialization (Done)**: Workspace setup, Vite + React + Tailwind CSS, FastAPI + venv, `PROJECT_PLAN.md`, `.gitignore`, `/api/health`, initial Git commit (`1d2e911`).
 2. **Phase 2 — Backend Database, Models, API & Analytics (Done)**: AI-assisted implementation of SQLAlchemy 2.x models/DB session management, Pydantic v2 strict validation, REST endpoints, 30-day UTC trend analytics, synthetic seed script, and 35 Pytest tests.
 3. **Phase 3 — Frontend Core UI, History Table & Trends Integration (Done)**: AI-assisted implementation of healthcare UI design system, `usePatientSymptoms` hook, centralized `fetch` API client, `SymptomForm`, `SymptomTable`, `SeverityChart` (Recharts), `SummaryCards`, and 7 Vitest integration tests.
-4. **Phase 4 — Deep Analytics Review, Polish & Final Documentation (Next)**: Analytics/chart review, browser E2E verification, `README.md` with AI usage disclosure, and final polish.
+4. **Phase 4 — Quality Assurance, Bug Fixes & Verification (Done)**: Fixed Windows timestamp collision edge case, eliminated future timestamps in `seed_demo.py`, resolved `oxlint` warning, split Recharts chunk, expanded backend (37) and frontend (10) test suites, and audited repository security.
+5. **Phase 5 — Final Documentation & Submission Prep (Next)**: Create final `README.md` with AI usage disclosure, perform manual browser checklist, and push approved Phase 4–5 commits.

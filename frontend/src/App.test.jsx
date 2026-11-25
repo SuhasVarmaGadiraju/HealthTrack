@@ -326,4 +326,168 @@ describe('HealthTrack Dashboard', () => {
     )
     expect(screen.getByText('No trend data in the last 30 days')).toBeInTheDocument()
   })
+
+  it('displays server 422 and 500 errors safely and preserves entered form text', async () => {
+    let mode = '422'
+    globalThis.fetch = vi.fn((url, options) => {
+      if (options?.method === 'POST') {
+        if (mode === '422') {
+          return jsonResponse(
+            { detail: [{ msg: 'description must not be empty or whitespace-only.' }] },
+            422
+          )
+        }
+        return jsonResponse({ detail: 'internal stack trace should not leak' }, 500)
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      return jsonResponse([])
+    })
+
+    render(<App />)
+    await waitFor(() => {
+      expect(screen.getByText('No symptoms logged yet')).toBeInTheDocument()
+    })
+
+    const textarea = screen.getByLabelText('Symptom Description')
+    fireEvent.change(textarea, { target: { value: 'Server error test symptom' } })
+    fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('description must not be empty or whitespace-only.')
+      ).toBeInTheDocument()
+    })
+    expect(textarea).toHaveValue('Server error test symptom')
+
+    mode = '500'
+    fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('The server encountered an unexpected error. Please try again shortly.')
+      ).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/internal stack trace/i)).not.toBeInTheDocument()
+    expect(textarea).toHaveValue('Server error test symptom')
+  })
+
+  it('recovers from failed history retrieval via Retry and handles post-save refresh failure', async () => {
+    let failHistory = true
+    const savedRecord = {
+      id: 99,
+      patient_id: 'PAT001',
+      description: 'Post-save refresh test',
+      severity: 5,
+      timestamp: '2026-11-25T12:00:00.000000Z',
+    }
+
+    globalThis.fetch = vi.fn((url, options) => {
+      if (options?.method === 'POST') {
+        failHistory = true
+        return jsonResponse({ message: 'Symptom logged successfully', data: savedRecord }, 201)
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      if (failHistory) {
+        return Promise.reject(new TypeError('Network down'))
+      }
+      return jsonResponse(PAT001_LOGS)
+    })
+
+    render(<App />)
+    await waitFor(() => {
+      expect(screen.getByText('Could not load symptom history')).toBeInTheDocument()
+    })
+
+    failHistory = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Morning sinus pressure')).toBeInTheDocument()
+    })
+
+    // Now submit a symptom where POST succeeds (201) but subsequent history refresh fails
+    const textarea = screen.getByLabelText('Symptom Description')
+    fireEvent.change(textarea, { target: { value: 'Post-save refresh test' } })
+    fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Symptom logged successfully, but refreshing the dashboard data failed. Use Retry to reload.'
+        )
+      ).toBeInTheDocument()
+    })
+    expect(textarea).toHaveValue('')
+  })
+
+  it('ignores active submission response if user switches patient mid-flight and escapes HTML descriptions', async () => {
+    let resolvePost
+    const pendingPost = new Promise((resolve) => {
+      resolvePost = resolve
+    })
+
+    const htmlLog = {
+      id: 20,
+      patient_id: 'PAT002',
+      description: '<script>alert("xss")</script> & rash',
+      severity: 3,
+      timestamp: '2026-11-25T10:00:00.000000Z',
+    }
+
+    globalThis.fetch = vi.fn((url, options) => {
+      if (options?.method === 'POST') {
+        return pendingPost
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      if (url.includes('patient_id=PAT002')) {
+        return jsonResponse([htmlLog])
+      }
+      return jsonResponse(PAT001_LOGS)
+    })
+
+    render(<App />)
+    await waitFor(() => {
+      expect(screen.getByText('Morning sinus pressure')).toBeInTheDocument()
+    })
+
+    const textarea = screen.getByLabelText('Symptom Description')
+    fireEvent.change(textarea, { target: { value: 'In-flight PAT001 symptom' } })
+    fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
+
+    // Switch to PAT002 while PAT001 POST is still pending
+    fireEvent.click(screen.getByRole('button', { name: 'PAT002' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('<script>alert("xss")</script> & rash')).toBeInTheDocument()
+    })
+
+    // Resolve PAT001's in-flight POST after switching to PAT002
+    resolvePost(
+      new Response(
+        JSON.stringify({
+          message: 'Symptom logged successfully',
+          data: {
+            id: 50,
+            patient_id: 'PAT001',
+            description: 'In-flight PAT001 symptom',
+            severity: 5,
+            timestamp: '2026-11-25T11:00:00.000000Z',
+          },
+        }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } }
+      )
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('<script>alert("xss")</script> & rash')).toBeInTheDocument()
+    })
+    expect(screen.queryByText('In-flight PAT001 symptom')).not.toBeInTheDocument()
+    expect(screen.queryByText('Symptom logged successfully')).not.toBeInTheDocument()
+  })
 })
