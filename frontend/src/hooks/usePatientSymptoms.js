@@ -89,13 +89,42 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
   )
 
   useEffect(() => {
-    void fetchPatientBundle(activePatientId)
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
+    const controller = new AbortController()
+    const seq = ++requestSeqRef.current
+    const patientId = activePatientId
+
+    Promise.allSettled([
+      fetchSymptoms(patientId, { signal: controller.signal }),
+      fetchSymptomTrends(patientId, { signal: controller.signal }),
+    ]).then(([historyResult, trendsResult]) => {
+      if (seq !== requestSeqRef.current || activePatientRef.current !== patientId) {
+        return
       }
+      if (historyResult.status === 'fulfilled') {
+        setSymptoms(historyResult.value)
+        setIsLoadingHistory(false)
+      } else if (historyResult.reason?.name !== 'AbortError') {
+        setHistoryError(
+          historyResult.reason?.message || 'Unable to load symptom history for this patient.'
+        )
+        setIsLoadingHistory(false)
+      }
+
+      if (trendsResult.status === 'fulfilled') {
+        setTrends(trendsResult.value)
+        setIsLoadingTrends(false)
+      } else if (trendsResult.reason?.name !== 'AbortError') {
+        setTrendsError(
+          trendsResult.reason?.message || 'Unable to load 30-day severity trends.'
+        )
+        setIsLoadingTrends(false)
+      }
+    })
+
+    return () => {
+      controller.abort()
     }
-  }, [activePatientId, fetchPatientBundle])
+  }, [activePatientId])
 
   const selectPatient = useCallback((candidateId) => {
     const check = validatePatientId(candidateId)
