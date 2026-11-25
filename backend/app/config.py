@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     app_name: str = "HealthTrack API"
     database_url: str = "sqlite:///./healthtrack.db"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     model_config = SettingsConfigDict(
         env_file=str(BACKEND_DIR / ".env"),
