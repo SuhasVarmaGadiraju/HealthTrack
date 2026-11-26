@@ -9,7 +9,7 @@ HealthTrack is a full-stack symptom tracking web app built for the AidenAI AI/ML
 Core capabilities:
 - Log symptoms (`patient_id`, `description`, `severity`, server-generated UTC `timestamp`) to SQLite with strict server-side validation.
 - Browse existing patients dynamically via `GET /api/patients` using a searchable dropdown with one-click selection, or enter a new patient ID manually; creating a symptom for a new patient updates the list automatically.
-- View patient-specific history sorted newest-first in the UI (while `GET /api/symptoms` preserves ascending chronological order), summary cards across all records, and a 30-day UTC daily average severity line chart.
+- View patient-specific history in ascending chronological order (oldest first, latest entries at the bottom), summary cards across all records, and a 30-day UTC daily average severity line chart.
 - Print or save a patient-specific report via **Share with Doctor** (`window.print()`), including summary statistics, 30-day trends, and complete symptom history in a print layout that hides interactive controls and keeps all data local (nothing is sent externally).
 - Handle network errors, HTTP `422`/`500` responses, loading/empty states, and retry actions without losing typed form input.
 
@@ -19,7 +19,7 @@ Core capabilities:
 | 2 | Store and retrieve at least 5 symptom logs with unique timestamps | Must | `backend/app/services/symptoms.py`, `backend/scripts/seed_demo.py` | Automated Pytest and live 5-POST HTTP check | Done |
 | 3 | `POST` endpoint rejecting empty/whitespace descriptions and invalid severities | Must | `POST /api/symptoms` (`routers/symptoms.py`, `schemas.py`) | Automated Pytest (18 `422` cases + `1`/`10` boundaries) and live HTTP check | Done |
 | 4 | `GET` endpoint for patient-specific logs sorted by timestamp ascending | Must | `GET /api/symptoms?patient_id=...` (`ORDER BY timestamp ASC, id ASC`) | Automated Pytest and live HTTP check | Done |
-| 5 | Frontend form, history table, and network/server error handling | Must | `SymptomForm.jsx`, `SymptomTable.jsx`, `PatientSelector.jsx`, `src/api/symptoms.js` | 15 Vitest integration tests (mocked APIs) and manual desktop inspection | Done |
+| 5 | Frontend form, history table (latest at bottom), and network/server error handling | Must | `SymptomForm.jsx`, `SymptomTable.jsx`, `PatientSelector.jsx`, `src/api/symptoms.js` | 15 Vitest integration tests (mocked APIs) and manual desktop inspection | Done |
 | 6 | Line chart of daily average severity over the last 30 days | Could | `GET /api/symptoms/trends`, `SeverityChart.jsx` (Recharts) | Automated Pytest (`test_trends.py`), Vitest, and live HTTP check | Done |
 
 ## Tech Stack
@@ -235,7 +235,7 @@ npm run test
 npm run lint
 npm run build
 ```
-- **Vitest (`npm run test`):** **15 passed, 0 failed** (`src/App.test.jsx`, with mocked `fetch` and `ResizeObserver`). Covers dashboard loading, summary stats, empty states, whitespace rejection, submission and newest-first table updates, network/422/500 error handling, retry recovery, stale-response protection during patient switching, duplicate-submit prevention, plain-text HTML escaping, dynamic patient list loading/search/one-click selection, post-submit patient list sync, **Share with Doctor** print/disabled states, and fresh empty-DB `PAT001` behavior.
+- **Vitest (`npm run test`):** **15 passed, 0 failed** (`src/App.test.jsx`, with mocked `fetch` and `ResizeObserver`). Covers dashboard loading, summary stats, empty states, whitespace rejection, submission and chronological table updates (latest at bottom), network/422/500 error handling (verifying no success message on failure), retry recovery, stale-response protection during patient switching, duplicate-submit prevention, plain-text HTML escaping, dynamic patient list loading/search/one-click selection, post-submit patient list sync, **Share with Doctor** print/disabled states, and fresh empty-DB `PAT001` behavior.
 - **Lint (`npm run lint`):** `oxlint` passed with **0 warnings, 0 errors**.
 - **Build (`npm run build`):** `vite build` succeeded cleanly (total **56 passing automated tests** across backend and frontend).
 
@@ -249,7 +249,7 @@ Automated Chrome browser E2E testing was unavailable in this environment (`chrom
 
 - **Single-hook request management (`usePatientSymptoms`):** Uses `AbortController` and sequence counters so switching patients or submitting while another request is in flight never overwrites active data. `POST` requests are never auto-retried to avoid duplicate records.
 - **Chart bundle splitting:** `vite.config.js` splits `recharts` and `d3-*` into a separate `charts` chunk to keep the main app bundle small.
-- **Known limitations:** No authentication or authorization (`patient_id` is only a demo filter); synthetic data only (no real patient data or HIPAA claims); local SQLite single-writer setup; automated browser E2E verification could not run in this environment.
+- **Known limitations:** `patient_id` values provide demonstration-level data scoping only, not authentication or authorization. The application is intended for synthetic patient data only (no real patient data or HIPAA claims); any future production deployment would require authentication, backend authorization, and patient consent workflows. Uses a local SQLite single-writer setup, and automated browser E2E verification could not run in this environment.
 
 ## AI Usage
 
