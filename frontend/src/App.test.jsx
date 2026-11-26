@@ -289,7 +289,8 @@ describe('HealthTrack Dashboard', () => {
 
     // Trigger a slow reload of PAT001, then immediately switch to PAT002
     fireEvent.click(screen.getByRole('button', { name: 'Load Patient' }))
-    fireEvent.click(screen.getByRole('button', { name: 'PAT002' }))
+    fireEvent.change(screen.getByLabelText('Patient ID'), { target: { value: 'PAT002' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Patient' }))
 
     await waitFor(() => {
       expect(screen.getByText('Seasonal allergy sneezing')).toBeInTheDocument()
@@ -461,7 +462,8 @@ describe('HealthTrack Dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
 
     // Switch to PAT002 while PAT001 POST is still pending
-    fireEvent.click(screen.getByRole('button', { name: 'PAT002' }))
+    fireEvent.change(screen.getByLabelText('Patient ID'), { target: { value: 'PAT002' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Patient' }))
 
     await waitFor(() => {
       expect(screen.getByText('<script>alert("xss")</script> & rash')).toBeInTheDocument()
@@ -489,5 +491,153 @@ describe('HealthTrack Dashboard', () => {
     })
     expect(screen.queryByText('In-flight PAT001 symptom')).not.toBeInTheDocument()
     expect(screen.queryByText('Symptom logged successfully')).not.toBeInTheDocument()
+  })
+
+  it('loads dynamic patient list, filters case-insensitively, and selects a patient with one click', async () => {
+    globalThis.fetch = vi.fn((url) => {
+      if (url.endsWith('/api/patients')) {
+        return jsonResponse([
+          { patient_id: 'PAT001' },
+          { patient_id: 'PAT002' },
+          { patient_id: 'PAT_ALPHA' },
+        ])
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      if (url.includes('patient_id=PAT002')) {
+        return jsonResponse(PAT002_LOGS)
+      }
+      return jsonResponse(PAT001_LOGS)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Browse existing patients/i })).toHaveTextContent(
+        'Patients (3)'
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Browse existing patients/i }))
+
+    const searchInput = screen.getByLabelText('Search patients')
+    fireEvent.change(searchInput, { target: { value: 'pat002' } })
+    expect(screen.getByRole('option', { name: 'PAT002' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: 'PAT_ALPHA' })).not.toBeInTheDocument()
+
+    // Non-matching search shows empty search message
+    fireEvent.change(searchInput, { target: { value: 'zzz' } })
+    expect(screen.getByText(/No patients matching/i)).toBeInTheDocument()
+
+    // Clear search and select PAT002 with one click (no Load Patient click needed)
+    fireEvent.change(searchInput, { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'PAT002' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Seasonal allergy sneezing')).toBeInTheDocument()
+    })
+  })
+
+  it('refreshes dynamic patient list after creating a new patient first symptom', async () => {
+    let patientList = [{ patient_id: 'PAT001' }]
+    let newPatientLogs = []
+
+    globalThis.fetch = vi.fn((url, options) => {
+      if (options?.method === 'POST') {
+        const body = JSON.parse(options.body)
+        const created = {
+          id: 77,
+          patient_id: body.patient_id,
+          description: body.description,
+          severity: body.severity,
+          timestamp: '2026-11-26T08:00:00.000000Z',
+        }
+        newPatientLogs = [created]
+        patientList = [{ patient_id: 'PAT001' }, { patient_id: body.patient_id }]
+        return jsonResponse({ message: 'Symptom logged successfully', data: created }, 201)
+      }
+      if (url.endsWith('/api/patients')) {
+        return jsonResponse(patientList)
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      if (url.includes('patient_id=PAT_NEW_99')) {
+        return jsonResponse(newPatientLogs)
+      }
+      return jsonResponse(PAT001_LOGS)
+    })
+
+    render(<App />)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Browse existing patients/i })).toHaveTextContent(
+        'Patients (1)'
+      )
+    })
+
+    // Enter a new patient ID manually and load it
+    fireEvent.change(screen.getByLabelText('Patient ID'), { target: { value: 'PAT_NEW_99' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Patient' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('No symptoms logged yet')).toBeInTheDocument()
+    })
+
+    // Submit first symptom for PAT_NEW_99
+    fireEvent.change(screen.getByLabelText('Symptom Description'), {
+      target: { value: 'First symptom for new patient' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Browse existing patients/i })).toHaveTextContent(
+        'Patients (2)'
+      )
+    })
+    expect(screen.getByText('First symptom for new patient')).toBeInTheDocument()
+  })
+
+  it('keeps manual Patient ID entry working when /api/patients fails and recovers on Retry', async () => {
+    let failPatients = true
+    globalThis.fetch = vi.fn((url) => {
+      if (url.endsWith('/api/patients')) {
+        if (failPatients) {
+          return Promise.reject(new TypeError('Network error'))
+        }
+        return jsonResponse([{ patient_id: 'PAT001' }, { patient_id: 'PAT002' }])
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      if (url.includes('patient_id=PAT002')) {
+        return jsonResponse(PAT002_LOGS)
+      }
+      return jsonResponse(PAT001_LOGS)
+    })
+
+    render(<App />)
+
+    // Manual patient entry still works even though /api/patients failed
+    fireEvent.change(screen.getByLabelText('Patient ID'), { target: { value: 'PAT002' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Patient' }))
+    await waitFor(() => {
+      expect(screen.getByText('Seasonal allergy sneezing')).toBeInTheDocument()
+    })
+
+    // Open dropdown, see error, and click Retry to recover
+    fireEvent.click(screen.getByRole('button', { name: /Browse existing patients/i }))
+    expect(
+      screen.getByText(/Unable to connect to the HealthTrack backend/i)
+    ).toBeInTheDocument()
+
+    failPatients = false
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Browse existing patients/i })).toHaveTextContent(
+        'Patients (2)'
+      )
+    })
   })
 })

@@ -137,6 +137,16 @@ export async function createSymptom(payload, { signal } = {}) {
   return data
 }
 
+export async function fetchPatients({ signal } = {}) {
+  const data = await requestJson('/api/patients', { signal })
+  if (!Array.isArray(data)) {
+    throw new ApiError('Unexpected patient list format received from server.', {
+      code: 'INVALID_RESPONSE',
+    })
+  }
+  return data
+}
+
 export async function fetchHealth({ signal } = {}) {
   return requestJson('/api/health', { signal })
 }

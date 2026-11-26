@@ -18,16 +18,20 @@ function App() {
     setPatientInputError,
     symptoms,
     trends,
+    patients,
     isLoadingHistory,
     isLoadingTrends,
+    isLoadingPatients,
     historyError,
     trendsError,
+    patientsError,
     isSubmitting,
     submitError,
     submitSuccess,
     selectPatient,
     retryHistory,
     retryTrends,
+    retryPatients,
     submitSymptom,
     clearFeedback,
   } = usePatientSymptoms()
@@ -72,6 +76,10 @@ function App() {
           onSelectPatient={selectPatient}
           error={patientInputError}
           isLoading={isLoadingHistory || isLoadingTrends}
+          patients={patients}
+          isLoadingPatients={isLoadingPatients}
+          patientsError={patientsError}
+          onRetryPatients={retryPatients}
         />
 
         <SummaryCards

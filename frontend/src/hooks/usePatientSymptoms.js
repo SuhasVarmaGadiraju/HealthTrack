@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createSymptom, fetchSymptoms, fetchSymptomTrends } from '../api/symptoms'
+import { createSymptom, fetchPatients, fetchSymptoms, fetchSymptomTrends } from '../api/symptoms'
 
 const DEFAULT_PATIENT_ID = 'PAT001'
+
+function extractUniquePatientIds(records) {
+  const seen = new Set()
+  const ids = []
+  for (const item of records) {
+    const pid = typeof item?.patient_id === 'string' ? item.patient_id.trim() : ''
+    if (pid && !seen.has(pid)) {
+      seen.add(pid)
+      ids.push(pid)
+    }
+  }
+  return ids
+}
 
 export function validatePatientId(rawValue) {
   const trimmed = typeof rawValue === 'string' ? rawValue.trim() : ''
@@ -21,10 +34,13 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
 
   const [symptoms, setSymptoms] = useState([])
   const [trends, setTrends] = useState([])
+  const [patients, setPatients] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [isLoadingTrends, setIsLoadingTrends] = useState(true)
+  const [isLoadingPatients, setIsLoadingPatients] = useState(true)
   const [historyError, setHistoryError] = useState(null)
   const [trendsError, setTrendsError] = useState(null)
+  const [patientsError, setPatientsError] = useState(null)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
@@ -33,6 +49,7 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
   const activePatientRef = useRef(activePatientId)
   const abortControllerRef = useRef(null)
   const requestSeqRef = useRef(0)
+  const patientsSeqRef = useRef(0)
 
   useEffect(() => {
     activePatientRef.current = activePatientId
@@ -126,6 +143,32 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
     }
   }, [activePatientId])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    const seq = ++patientsSeqRef.current
+
+    fetchPatients({ signal: controller.signal })
+      .then((records) => {
+        if (seq !== patientsSeqRef.current) {
+          return
+        }
+        setPatients(extractUniquePatientIds(records))
+        setPatientsError(null)
+        setIsLoadingPatients(false)
+      })
+      .catch((error) => {
+        if (error?.name === 'AbortError' || seq !== patientsSeqRef.current) {
+          return
+        }
+        setPatientsError(error?.message || 'Unable to load available patients.')
+        setIsLoadingPatients(false)
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
   const selectPatient = useCallback((candidateId) => {
     const check = validatePatientId(candidateId)
     if (!check.valid) {
@@ -193,6 +236,26 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
     }
   }, [])
 
+  const retryPatients = useCallback(async () => {
+    const seq = ++patientsSeqRef.current
+    setIsLoadingPatients(true)
+    setPatientsError(null)
+    try {
+      const records = await fetchPatients()
+      if (seq === patientsSeqRef.current) {
+        setPatients(extractUniquePatientIds(records))
+      }
+    } catch (error) {
+      if (seq === patientsSeqRef.current) {
+        setPatientsError(error?.message || 'Unable to load available patients.')
+      }
+    } finally {
+      if (seq === patientsSeqRef.current) {
+        setIsLoadingPatients(false)
+      }
+    }
+  }, [])
+
   const submitSymptom = useCallback(async ({ description, severity }) => {
     if (isSubmitting) {
       return false
@@ -223,11 +286,17 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
       return true
     }
 
-    // Optimistically append or refresh from backend; refresh both history & trends.
-    const [historyResult, trendsResult] = await Promise.allSettled([
+    // Optimistically append or refresh from backend; refresh history, trends, and patient list.
+    const [historyResult, trendsResult, patientsResult] = await Promise.allSettled([
       fetchSymptoms(targetPatient),
       fetchSymptomTrends(targetPatient),
+      fetchPatients(),
     ])
+
+    if (patientsResult.status === 'fulfilled') {
+      setPatients(extractUniquePatientIds(patientsResult.value))
+      setPatientsError(null)
+    }
 
     if (activePatientRef.current !== targetPatient) {
       setIsSubmitting(false)
@@ -278,16 +347,20 @@ export function usePatientSymptoms(initialPatientId = DEFAULT_PATIENT_ID) {
     setPatientInputError,
     symptoms,
     trends,
+    patients,
     isLoadingHistory,
     isLoadingTrends,
+    isLoadingPatients,
     historyError,
     trendsError,
+    patientsError,
     isSubmitting,
     submitError,
     submitSuccess,
     selectPatient,
     retryHistory,
     retryTrends,
+    retryPatients,
     submitSymptom,
     clearFeedback,
   }
