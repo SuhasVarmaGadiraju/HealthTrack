@@ -112,13 +112,13 @@ describe('HealthTrack Dashboard', () => {
     const daysTrackedCard = screen.getByText('Days tracked').closest('div').parentElement
     expect(within(daysTrackedCard).getByText('2')).toBeInTheDocument()
 
-    // Chronological order in table: oldest first, latest at bottom
+    // Reverse-chronological order in table: newest first
     const table = screen.getByRole('table')
     const rows = within(table).getAllByRole('row').slice(1) // skip header row
     expect(rows).toHaveLength(3)
-    expect(rows[0]).toHaveTextContent('Morning sinus pressure')
+    expect(rows[0]).toHaveTextContent('Evening fatigue')
     expect(rows[1]).toHaveTextContent('Afternoon migraine')
-    expect(rows[2]).toHaveTextContent('Evening fatigue')
+    expect(rows[2]).toHaveTextContent('Morning sinus pressure')
   })
 
   it('displays empty states when patient has no symptom records', async () => {
@@ -210,11 +210,11 @@ describe('HealthTrack Dashboard', () => {
       severity: 7,
     })
 
-    // Form cleared and new record appears at the bottom of the table
+    // Form cleared and new record appears at the top of the table (newest first)
     expect(textarea).toHaveValue('')
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(4)
-    expect(rows[3]).toHaveTextContent('Mild tension headache')
+    expect(rows[0]).toHaveTextContent('Mild tension headache')
   })
 
   it('preserves entered symptom text on network failure and prevents duplicate pending submissions', async () => {
@@ -640,6 +640,7 @@ describe('HealthTrack Dashboard', () => {
       )
     })
   })
+
   it('supports Share with Doctor print action and disables it when no records exist', async () => {
     const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {})
     let hasLogs = false

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { ClipboardList, Loader2 } from 'lucide-react'
 import { formatLocalDate, formatLocalTime, getLocalTimezoneLabel } from '../utils/formatters'
 import { getSeverityMeta } from '../utils/severity'
@@ -6,6 +7,19 @@ import { FeedbackMessage } from './FeedbackMessage'
 
 export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
   const timezoneLabel = getLocalTimezoneLabel()
+
+  const sortedSymptoms = useMemo(() => {
+    if (!Array.isArray(symptoms) || symptoms.length === 0) {
+      return []
+    }
+    return [...symptoms].sort((a, b) => {
+      const timeDiff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      if (timeDiff !== 0) {
+        return timeDiff
+      }
+      return (b.id ?? 0) - (a.id ?? 0)
+    })
+  }, [symptoms])
 
   return (
     <section
@@ -18,12 +32,12 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
             Symptom History
           </h2>
           <p className="mt-0.5 text-sm text-slate-600">
-            Chronological log ordered oldest first, with the latest entries at the bottom.
+            Reverse-chronological log ordered newest first (all available records).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
           <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">
-            {symptoms.length} {symptoms.length === 1 ? 'record' : 'records'}
+            {sortedSymptoms.length} {sortedSymptoms.length === 1 ? 'record' : 'records'}
           </span>
           <span>Times shown in {timezoneLabel}</span>
         </div>
@@ -42,7 +56,7 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
             <Loader2 className="h-4 w-4 animate-spin text-teal-600" aria-hidden="true" />
             Loading symptom history...
           </div>
-        ) : symptoms.length === 0 ? (
+        ) : sortedSymptoms.length === 0 ? (
           <EmptyState
             icon={ClipboardList}
             title="No symptoms logged yet"
@@ -68,7 +82,7 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {symptoms.map((record) => {
+                {sortedSymptoms.map((record) => {
                   const meta = getSeverityMeta(record.severity)
                   return (
                     <tr key={record.id} className="transition hover:bg-slate-50/70">
