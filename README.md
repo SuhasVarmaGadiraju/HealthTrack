@@ -9,7 +9,8 @@ HealthTrack is a full-stack symptom tracking web app built for the AidenAI AI/ML
 Core capabilities:
 - Log symptoms (`patient_id`, `description`, `severity`, server-generated UTC `timestamp`) to SQLite with strict server-side validation.
 - Browse existing patients dynamically via `GET /api/patients` using a searchable dropdown with one-click selection, or enter a new patient ID manually; creating a symptom for a new patient updates the list automatically.
-- View patient-specific history sorted oldest-first (latest entries at the bottom), summary cards across all records, and a 30-day UTC daily average severity line chart.
+- View patient-specific history sorted newest-first in the UI (while `GET /api/symptoms` preserves ascending chronological order), summary cards across all records, and a 30-day UTC daily average severity line chart.
+- Print or save a patient-specific report via **Share with Doctor** (`window.print()`), including summary statistics, 30-day trends, and complete symptom history in a print layout that hides interactive controls and keeps all data local (nothing is sent externally).
 - Handle network errors, HTTP `422`/`500` responses, loading/empty states, and retry actions without losing typed form input.
 
 | # | Requirement | Priority | Implementation | Verification | Status |
@@ -18,7 +19,7 @@ Core capabilities:
 | 2 | Store and retrieve at least 5 symptom logs with unique timestamps | Must | `backend/app/services/symptoms.py`, `backend/scripts/seed_demo.py` | Automated Pytest and live 5-POST HTTP check | Done |
 | 3 | `POST` endpoint rejecting empty/whitespace descriptions and invalid severities | Must | `POST /api/symptoms` (`routers/symptoms.py`, `schemas.py`) | Automated Pytest (18 `422` cases + `1`/`10` boundaries) and live HTTP check | Done |
 | 4 | `GET` endpoint for patient-specific logs sorted by timestamp ascending | Must | `GET /api/symptoms?patient_id=...` (`ORDER BY timestamp ASC, id ASC`) | Automated Pytest and live HTTP check | Done |
-| 5 | Frontend form, history table (latest at bottom), and network/server error handling | Must | `SymptomForm.jsx`, `SymptomTable.jsx`, `PatientSelector.jsx`, `src/api/symptoms.js` | 13 Vitest integration tests (mocked APIs) and manual desktop inspection | Done |
+| 5 | Frontend form, history table, and network/server error handling | Must | `SymptomForm.jsx`, `SymptomTable.jsx`, `PatientSelector.jsx`, `src/api/symptoms.js` | 15 Vitest integration tests (mocked APIs) and manual desktop inspection | Done |
 | 6 | Line chart of daily average severity over the last 30 days | Could | `GET /api/symptoms/trends`, `SeverityChart.jsx` (Recharts) | Automated Pytest (`test_trends.py`), Vitest, and live HTTP check | Done |
 
 ## Tech Stack
@@ -85,8 +86,8 @@ HealthTrack/
     ├── package.json
     ├── vite.config.js            # Vite, Tailwind plugin, Recharts chunk split, Vitest config
     └── src/
-        ├── App.jsx               # Dashboard layout
-        ├── App.test.jsx          # 13 Vitest integration tests
+        ├── App.jsx               # Dashboard layout & Share with Doctor print report
+        ├── App.test.jsx          # 15 Vitest integration tests
         ├── api/symptoms.js       # Fetch wrapper and FastAPI error parser
         ├── hooks/usePatientSymptoms.js
         ├── components/
@@ -151,7 +152,7 @@ URLs:
 
 ### Demo Data
 
-`backend/healthtrack.db` is excluded from Git, so a fresh clone starts empty (tables are created automatically on startup). Running `scripts/seed_demo.py` inserts synthetic records without deleting existing data or creating future timestamps, and can be run repeatedly without creating duplicates:
+`backend/healthtrack.db` is excluded from Git, so a fresh clone starts with an empty database (tables are created automatically on startup, and `PAT001` intentionally displays empty states with **Share with Doctor** disabled until a symptom is logged). Running `scripts/seed_demo.py` inserts synthetic records without deleting existing data or creating future timestamps, and can be run repeatedly without creating duplicates:
 - `PAT001`: 12 logs across the last 30 UTC days (including a 5-day streak and multi-log days).
 - `PAT002`: 3 logs to verify patient isolation.
 
@@ -234,9 +235,9 @@ npm run test
 npm run lint
 npm run build
 ```
-- **Vitest (`npm run test`):** **13 passed, 0 failed** (`src/App.test.jsx`, with mocked `fetch` and `ResizeObserver`). Covers dashboard loading, summary stats, empty states, whitespace rejection, submission and table updates, network/422/500 error handling, retry recovery, stale-response protection during patient switching, duplicate-submit prevention, plain-text HTML escaping, dynamic patient list loading/search/one-click selection, and post-submit patient list sync.
+- **Vitest (`npm run test`):** **15 passed, 0 failed** (`src/App.test.jsx`, with mocked `fetch` and `ResizeObserver`). Covers dashboard loading, summary stats, empty states, whitespace rejection, submission and newest-first table updates, network/422/500 error handling, retry recovery, stale-response protection during patient switching, duplicate-submit prevention, plain-text HTML escaping, dynamic patient list loading/search/one-click selection, post-submit patient list sync, **Share with Doctor** print/disabled states, and fresh empty-DB `PAT001` behavior.
 - **Lint (`npm run lint`):** `oxlint` passed with **0 warnings, 0 errors**.
-- **Build (`npm run build`):** `vite build` succeeded cleanly (total **54 passing automated tests** across backend and frontend).
+- **Build (`npm run build`):** `vite build` succeeded cleanly (total **56 passing automated tests** across backend and frontend).
 
 Automated Chrome browser E2E testing was unavailable in this environment (`chrome_devtools` MCP `DevToolsActivePort` missing). Manual desktop inspection of the dashboard and `/docs` was performed. Manual verification checklist at `http://localhost:5173/`:
 1. Open the Patients dropdown, search for a patient, and select one with one click.
@@ -258,5 +259,5 @@ This project was built with AI-assisted development tools under human direction 
 - **Antigravity:** Project scaffolding, backend and frontend implementation, debugging, automated test creation, code refinement, and documentation.
 
 **Verification attribution:**
-- Automated tool checks (41 backend Pytest tests, 13 frontend Vitest tests, `oxlint`, Vite production build, `seed_demo.py` runs, and local HTTP probes) were executed with development tools.
-- Manual verification performed personally: viewing the running frontend dashboard, Swagger API docs (`/docs`), and published GitHub commit history. Automated Chrome E2E browser testing was unavailable in the development environment.
+- Automated tool checks (41 backend Pytest tests, 15 frontend Vitest tests, `oxlint`, Vite production build, `seed_demo.py` runs, and local HTTP probes) were executed with development tools.
+- Manual verification performed personally: viewing the running frontend dashboard, Share with Doctor print preview, Swagger API docs (`/docs`), and published GitHub commit history. Automated Chrome E2E browser testing was unavailable in the development environment.
