@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import init_db
+from app.routers.patients import router as patients_router
 from app.routers.symptoms import router as symptoms_router
 
 
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(symptoms_router)
+app.include_router(patients_router)
 
 
 @app.get("/api/health", tags=["Health"])

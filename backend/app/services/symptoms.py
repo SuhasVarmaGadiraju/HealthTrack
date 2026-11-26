@@ -46,6 +46,12 @@ def get_patient_symptoms(db: Session, patient_id: str) -> list[SymptomLog]:
     return list(db.scalars(stmt).all())
 
 
+def list_distinct_patients(db: Session) -> list[str]:
+    """Return distinct synthetic patient IDs sorted alphabetically."""
+    stmt = select(SymptomLog.patient_id).distinct().order_by(SymptomLog.patient_id.asc())
+    return list(db.scalars(stmt).all())
+
+
 def get_patient_severity_trends(
     db: Session,
     patient_id: str,

@@ -68,3 +68,9 @@ class DailySeverityTrend(BaseModel):
     date: str
     average_severity: float | None
     symptom_count: int
+
+
+class PatientSummary(BaseModel):
+    """Minimal synthetic patient identifier returned by the patient listing endpoint."""
+
+    patient_id: str
