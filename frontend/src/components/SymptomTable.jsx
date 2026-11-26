@@ -10,7 +10,7 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
   return (
     <section
       aria-labelledby="symptom-history-heading"
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs"
+      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-xs print:rounded-none print:border-0 print:p-0 print:shadow-none"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -49,7 +49,7 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
             description="Use the Log a Symptom form above to record the first symptom entry for this patient."
           />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 print:overflow-visible">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>

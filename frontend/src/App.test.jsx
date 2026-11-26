@@ -640,4 +640,93 @@ describe('HealthTrack Dashboard', () => {
       )
     })
   })
+  it('supports Share with Doctor print action and disables it when no records exist', async () => {
+    const printSpy = vi.spyOn(window, 'print').mockImplementation(() => {})
+    let hasLogs = false
+
+    globalThis.fetch = vi.fn((url) => {
+      if (url.endsWith('/api/patients')) {
+        return jsonResponse(hasLogs ? [{ patient_id: 'PAT001' }] : [])
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      return jsonResponse(hasLogs ? PAT001_LOGS : [])
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('No symptoms logged yet')).toBeInTheDocument()
+    })
+
+    const shareButton = screen.getByRole('button', { name: /Share with Doctor/i })
+    expect(shareButton).toBeDisabled()
+    fireEvent.click(shareButton)
+    expect(printSpy).not.toHaveBeenCalled()
+
+    // Switch to loaded data
+    hasLogs = true
+    fireEvent.click(screen.getByRole('button', { name: 'Load Patient' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Evening fatigue')).toBeInTheDocument()
+    })
+    expect(shareButton).toBeEnabled()
+    fireEvent.click(shareButton)
+    expect(printSpy).toHaveBeenCalledTimes(1)
+    expect(screen.getByText('HealthTrack — Patient Symptom Report')).toBeInTheDocument()
+  })
+
+  it('handles fresh empty database for PAT001 and updates patient list on first symptom', async () => {
+    let dbPatients = []
+    let pat1Logs = []
+
+    globalThis.fetch = vi.fn((url, options) => {
+      if (options?.method === 'POST') {
+        const body = JSON.parse(options.body)
+        const created = {
+          id: 1,
+          patient_id: body.patient_id,
+          description: body.description,
+          severity: body.severity,
+          timestamp: '2026-11-26T08:45:00.000000Z',
+        }
+        pat1Logs = [created]
+        dbPatients = [{ patient_id: body.patient_id }]
+        return jsonResponse({ message: 'Symptom logged successfully', data: created }, 201)
+      }
+      if (url.endsWith('/api/patients')) {
+        return jsonResponse(dbPatients)
+      }
+      if (url.includes('/api/symptoms/trends')) {
+        return jsonResponse(makeTrends())
+      }
+      return jsonResponse(pat1Logs)
+    })
+
+    render(<App />)
+
+    await waitFor(() => {
+      expect(screen.getByText('No symptoms logged yet')).toBeInTheDocument()
+    })
+    expect(screen.getByText('No trend data in the last 30 days')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Browse existing patients/i })).toHaveTextContent(
+      'Patients (0)'
+    )
+    expect(screen.getByRole('button', { name: /Share with Doctor/i })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('Symptom Description'), {
+      target: { value: 'First fresh DB symptom' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Log Symptom/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('First fresh DB symptom')).toBeInTheDocument()
+    })
+    expect(screen.getByRole('button', { name: /Browse existing patients/i })).toHaveTextContent(
+      'Patients (1)'
+    )
+    expect(screen.getByRole('button', { name: /Share with Doctor/i })).toBeEnabled()
+  })
 })
