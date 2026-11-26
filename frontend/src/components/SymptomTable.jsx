@@ -13,11 +13,11 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
       return []
     }
     return [...symptoms].sort((a, b) => {
-      const timeDiff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
       if (timeDiff !== 0) {
         return timeDiff
       }
-      return (b.id ?? 0) - (a.id ?? 0)
+      return (a.id ?? 0) - (b.id ?? 0)
     })
   }, [symptoms])
 
@@ -32,7 +32,7 @@ export function SymptomTable({ symptoms, isLoading, error, onRetry }) {
             Symptom History
           </h2>
           <p className="mt-0.5 text-sm text-slate-600">
-            Reverse-chronological log ordered newest first (all available records).
+            Chronological log ordered oldest first, with the latest entries at the bottom.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">

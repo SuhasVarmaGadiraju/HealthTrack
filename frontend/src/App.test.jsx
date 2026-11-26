@@ -112,13 +112,13 @@ describe('HealthTrack Dashboard', () => {
     const daysTrackedCard = screen.getByText('Days tracked').closest('div').parentElement
     expect(within(daysTrackedCard).getByText('2')).toBeInTheDocument()
 
-    // Reverse-chronological order in table: newest first
+    // Ascending chronological order in table: oldest first, latest at bottom
     const table = screen.getByRole('table')
     const rows = within(table).getAllByRole('row').slice(1) // skip header row
     expect(rows).toHaveLength(3)
-    expect(rows[0]).toHaveTextContent('Evening fatigue')
+    expect(rows[0]).toHaveTextContent('Morning sinus pressure')
     expect(rows[1]).toHaveTextContent('Afternoon migraine')
-    expect(rows[2]).toHaveTextContent('Morning sinus pressure')
+    expect(rows[2]).toHaveTextContent('Evening fatigue')
   })
 
   it('displays empty states when patient has no symptom records', async () => {
@@ -210,11 +210,11 @@ describe('HealthTrack Dashboard', () => {
       severity: 7,
     })
 
-    // Form cleared and new record appears at the top of the table (newest first)
+    // Form cleared and new record appears at the bottom of the table (oldest first, latest at bottom)
     expect(textarea).toHaveValue('')
     const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(4)
-    expect(rows[0]).toHaveTextContent('Mild tension headache')
+    expect(rows[3]).toHaveTextContent('Mild tension headache')
   })
 
   it('preserves entered symptom text on network failure and prevents duplicate pending submissions', async () => {
@@ -258,6 +258,7 @@ describe('HealthTrack Dashboard', () => {
         screen.getByText(/Unable to connect to the HealthTrack backend/i)
       ).toBeInTheDocument()
     })
+    expect(screen.queryByText(/Symptom logged successfully/i)).not.toBeInTheDocument()
     expect(textarea).toHaveValue('Persistent dizziness')
   })
 
@@ -370,6 +371,7 @@ describe('HealthTrack Dashboard', () => {
         screen.getByText('The server encountered an unexpected error. Please try again shortly.')
       ).toBeInTheDocument()
     })
+    expect(screen.queryByText(/Symptom logged successfully/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/internal stack trace/i)).not.toBeInTheDocument()
     expect(textarea).toHaveValue('Server error test symptom')
   })
